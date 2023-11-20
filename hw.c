@@ -1,11 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-//#include <sys/socket.h>
-//#include <netinet\in.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <pthread.h>
-//#include <arpa\inet.h>
-#include <winsock.h>
+#include <arpa/inet.h>
 
 typedef enum Msg {
     id, type, len, end, data
