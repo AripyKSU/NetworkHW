@@ -32,8 +32,8 @@ int main(int argc, char* argv[]) {
     int sockId = 0;
     connetServer(sockId);
 
-    pthread_t threadId;
-    pthread_create(&threadId, NULL, msgRecv, NULL);
+    pthread_t recvId;
+    pthread_create(&recvId, NULL, msgRecv, NULL);
 }
 
 //받은 pkt에서 msg data를 tokenizer하는 함수
@@ -48,6 +48,7 @@ void msgtok(char** msg, char* pkt){
         i++;
         temp = strtok(NULL, "|");
     }
+    
     free(temp);
 }
 
