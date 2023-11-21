@@ -13,6 +13,8 @@ typedef enum Msg {
 } Msg;
 
 void msgtok(char** msg, char* pkt);
+void connectServer(int sockId);
+void msgRecv(char** msg, int sockId);
 
 int main(int argc, char* argv[]) {
 
@@ -26,13 +28,12 @@ int main(int argc, char* argv[]) {
         msg[i] = (char*)malloc(sizeof(char) * MAX);
     }
 
-    /*실험용
-    char* pkt = (char*)malloc(sizeof(char) * MAX); 
-    strcpy(pkt, "Hello|I'm|Fine|Thank|You");
-    msgtok(msg, pkt);
-    for(int i=0; i<5; i++) {
-        printf("%s\n",msg[i]); 
-    }*/
+    //통신 시작
+    int sockId = 0;
+    connetServer(sockId);
+
+    pthread_t threadId;
+    pthread_create(&threadId, NULL, msgRecv, NULL);
 }
 
 //받은 pkt에서 msg data를 tokenizer하는 함수
@@ -50,14 +51,13 @@ void msgtok(char** msg, char* pkt){
     free(temp);
 }
 
-void connectServer() {
+void connectServer(int sockId) {
     //나만의 port# 이용
     int port = 61616;
-    int sockFlag;
     struct sockaddr_in serverAddr;
 
     //socket 할당
-    if((sockFlag = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+    if((sockId = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         printf("Socket 생성 실패\n");
         exit(0);
     }
@@ -69,21 +69,62 @@ void connectServer() {
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serverAddr.sin_port = htons(port);
 
-    if((connect(sockFlag, (struct sockaddr*)&serverAddr, sizeof(serverAddr)))<0){
+    if((connect(sockId, (struct sockaddr*)&serverAddr, sizeof(serverAddr)))<0){
         printf("Server-Client 연결 실패\n");
         exit(0);
     }
     else
         printf("Server-Client 연결 성공\n");
     
-
 }
 
-void dataRecv(int sockFlag) {
+void msgRecv(char** msg, int sockId) {
     char* buf = malloc(sizeof(char)*MAX);
 
     while(1) {
         memset(buf, 0x00, MAX);
-        read(sockFlag, buf, sizeof(buf));
+        read(sockId, buf, sizeof(buf));
+
+        msgtok(msg, buf);
+
+        //CHATTING
+        if(strcmp(msg[type], "CHAT_AUTH")) {
+
+        }
+        else if(strcmp(msg[type], "CHAT_REP")) {
+
+        }
+        else if(strcmp(msg[type], "CHAT_LISTEN")) {
+            
+        }
+
+        //FILEUP
+        if(strcmp(msg[type], "FILEUP_REP")) {
+
+        }
+        else if(strcmp(msg[type], "FILEUP_END")) {
+
+        }
+
+        //FILEDOWN
+        if(strcmp(msg[type], "FILEDOWN_REP")) {
+
+        }
+        else if(strcmp(msg[type], "FILEDOWN_DATA")) {
+
+        }
+
+        //FILELIST
+        if(strcmp(msg[type], "FILELIST_REP")) {
+
+        }
+
+        //END
+        if(strcmp(msg[type], "END_REP")) {
+            if(strcmp(msg[data], "BYE")) {
+                close(sockId);
+                exit(0);
+            }
+        }
     }
 }
