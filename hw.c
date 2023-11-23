@@ -21,7 +21,7 @@ void connectServer(int* sockId, char* user);
 void* msgRecv(void* sockIdPointer);
 void* msgSend(void* sockIdPointer);
 char* makeMsg(char* type, char* end, char* data);
-void* UploadFile();
+void* UploadFile(int sockId);
 
 int chatAuthFlag = 0;
 char* user;
@@ -115,7 +115,7 @@ void* msgRecv(void* sockIdPointer) {
         msgtok(buf);
 
         //CHATTING
-        if(strcmp(msg[type], "CHAT_AUTH")) {
+        if(strcmp(msg[type], "CHAT_AUTH") == 0) {
             printf("인증을 위한 간단한 퀴즈에 답해주세요.\n");
             printf("%s ?", msg[data]);
             char* ans = malloc(sizeof(char)*16);
@@ -123,47 +123,39 @@ void* msgRecv(void* sockIdPointer) {
             strcpy(buf, makeMsg("CHAT_ANS", "END", ans));
             write(sockId, buf, sizeof(buf));
         }
-        else if(strcmp(msg[type], "CHAT_REP")) {
+        else if(strcmp(msg[type], "CHAT_REP") == 0) {
             if(msg[data] == "ALLOW") {
                 printf("인증이 완료되었습니다.\n");
                 chatAuthFlag = 1;
             }
-            else if(msg[data] == "DENY"){
+            else if(strcmp(msg[data],"DENY") == 0){
                 printf("인증에 실패하였습니다.\n");
                 printf("다시 시도해주세요.\n");
             }
         }
-        else if(strcmp(msg[type], "CHAT_LISTEN")) {
+        else if(strcmp(msg[type], "CHAT_LISTEN") == 0) {
             if(chatAuthFlag == 0);
             else if(chatAuthFlag == 1) {
                 printf("%s: %s\n", msg[id], msg[data]);
             }
         }
 
-        //FILEUP
-        if(strcmp(msg[type], "FILEUP_REP")) {
-
-        }
-        else if(strcmp(msg[type], "FILEUP_END")) {
-
-        }
-
         //FILEDOWN
-        if(strcmp(msg[type], "FILEDOWN_REP")) {
+        if(strcmp(msg[type], "FILEDOWN_REP") == 0) {
 
         }
-        else if(strcmp(msg[type], "FILEDOWN_DATA")) {
+        else if(strcmp(msg[type], "FILEDOWN_DATA") == 0) {
 
         }
 
         //FILELIST
-        if(strcmp(msg[type], "FILELIST_REP")) {
+        if(strcmp(msg[type], "FILELIST_REP") == 0) {
 
         }
 
         //END
-        if(strcmp(msg[type], "END_REP")) {
-            if(strcmp(msg[data], "BYE")) {
+        if(strcmp(msg[type], "END_REP") == 0) {
+            if(strcmp(msg[data], "BYE") == 0) {
                 close(sockId);
                 return NULL;
             }
@@ -188,7 +180,7 @@ void* msgSend(void* sockIdPointer) {
         buf = malloc(sizeof(char)*MAX);
         memset(buf, 0x00, MAX);
         //채팅방 입장 or 채팅 보내기
-        if(select == "1") {
+        if(strcmp(select, "1") == 0) {
             if(chatAuthFlag == 0) {
                 printf("채팅방 입장 인증 요청을 전송합니다...\n");
                 strcpy(buf, makeMsg("CHAT_REQ", "END", "-"));
@@ -204,18 +196,17 @@ void* msgSend(void* sockIdPointer) {
             }
         }
         //파일 업로드
-        else if(select == "2") {
-            //UploadRequest();
-            UploadFile();
+        else if(strcmp(select, "2") == 0) {
+            UploadFile(sockId);
         }
-        else if(select == "3") {
+        else if(strcmp(select, "3") == 0) {
             
         }
-        else if(select == "4") {
+        else if(strcmp(select, "4") == 0) {
             
         }
         //접속 종료
-        else if(select == "5") {
+        else if(strcmp(select, "5") == 0) {
             printf("안녕히 가세요~");
             strcpy(buf, makeMsg("END_REQ", "END", "EXIT"));
             write(sockId, buf, sizeof(buf));
@@ -253,7 +244,7 @@ char* makeMsg(char* type, char* end, char* data) {
 }
 
 //클라이언트에서 파일 업로드 선택 시 호출될 함수
-void* UploadFile() {
+void* UploadFile(int sockId) {
     char* filename = malloc(sizeof(char)*MAX);
     int fp;
     //파일 이름 입력
@@ -267,6 +258,24 @@ void* UploadFile() {
     //파일 열기 시도
     if(fp = open(filename, "O_RDONLY") != -1) {
         
+        //파일 업로드 요청
+        char* buf = malloc(sizeof(char)*MAX);
+        printf("\"%s\" 파일 전송을 요청합니다... ",&filename);
+        strcpy(buf, makeMsg("FILEUP_REQ", "END", filename));
+        write(sockId, buf, sizeof(buf));
+
+        //요청에 대한 응답이 올때까지 대기
+        while(strcmp(msg[type],"FILEUP_REP") != 0) {
+            sleep(1);
+        }
+        if(strcmp(msg[data], "ALLOW") == 0) {
+            printf("요청이 승인되었습니다.\n");
+        }
+        else if(strcmp(msg[data], "DENY") == 0) {
+            printf("요청이 거부되었습니다.\n");
+            return NULL;
+        }
+
         //파일 크기 구하기
         struct stat st;
         stat(filename, &st);
@@ -288,7 +297,7 @@ void* UploadFile() {
             //temp를 msg형태로 가공한 char* buf
             buf = malloc(sizeof(char)*MAX);
             strcpy(buf, makeMsg("FILEUP_DATA","CONT",temp));
-            write(socketId, buf, sizeof(buf));
+            write(sockId, buf, sizeof(buf));
             free(buf);
             free(temp);
         }
@@ -297,9 +306,15 @@ void* UploadFile() {
         read(fp, temp, fileSize%maxLength);
         buf = malloc(sizeof(char)*MAX);
         strcpy(buf, makeMsg("FILEUP_DATA","END",temp));
-        write(socketId, buf, sizeof(buf));
+        write(sockId, buf, sizeof(buf));
         free(temp);
         fclose(fp);
+
+        //파일 업로드 끝났다는 신호가 올 때까지 대기
+        while(strcmp(msg[type],"FILEUP_END") != 0) {
+            sleep(1);
+        }
+        printf("파일 업로드가 완료되었습니다.\n");
     }
     else {
         printf("%s 을(를) 찾을 수 없습니다!", *filename);
