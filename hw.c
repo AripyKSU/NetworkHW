@@ -16,6 +16,8 @@ typedef enum Msg {
     id, type, len, end, data
 } Msg;
 
+//나중에 strcmp, close, free 다 확인 하셈
+
 void msgtok(char* pkt);
 void connectServer(int* sockId, char* user);
 void* msgRecv(void* sockIdPointer);
@@ -319,5 +321,60 @@ void* UploadFile(int sockId) {
     else {
         printf("%s 을(를) 찾을 수 없습니다!", *filename);
     };
+    return NULL;
+}
+
+//클라이언트에서 파일 업로드 선택 시 호출될 함수
+void* DownloadFile(int sockId) {
+    char* filename = malloc(sizeof(char)*MAX);
+    int fp;
+    //파일 이름 입력
+    printf("다운로드할 파일 이름: ");
+    scanf("%s",&filename);
+
+    //파일 다운로드 요청
+    char* buf = malloc(sizeof(char)*MAX);
+    printf("\"%s\" 파일 다운로드를 요청합니다... ",&filename);
+    strcpy(buf, makeMsg("FILEDOWN_REQ", "END", filename));
+    write(sockId, buf, sizeof(buf));
+
+    //요청에 대한 응답이 올때까지 대기
+    while(strcmp(msg[type],"FILEDOWN_REP") != 0) {
+        sleep(1);
+    }
+    if(strcmp(msg[data], "ALLOW") == 0) {
+        printf("요청이 승인되었습니다.\n");
+    }
+    else if(strcmp(msg[data], "DENY") == 0) {
+        printf("요청이 거부되었습니다. 파일 이름을 확인해보세요.\n");
+        return NULL;
+    }
+    free(buf);
+    buf = malloc(sizeof(char)*MAX);
+
+    //파일 열기 시도
+    if(fp = open(filename, O_WRONLY | O_CREAT) != -1) {
+        while(1) {
+            //파일 다운로드 데이터가 올 때까지 대기
+            while(strcmp(msg[type],"FILEDOWN_DATA") != 0) {
+                sleep(1);
+            }
+            //파일 다운로드 일부만 왔을 때
+            if(strcmp(msg[end], "CONT") == 0) {
+                write(fp, msg[data], strlen(msg[data]));
+                continue;
+            }
+            //파일 다운로드 끝부분
+            if(strcmp(msg[end], "END") == 0) {
+                write(fp, msg[data], strlen(msg[data]));
+                strcpy(buf, makeMsg("FILEDOWN_END", "END", "-"));
+                write(sockId, buf, sizeof(buf));
+            }
+            fclose(fp);
+        }
+    }
+    else {
+        printf("파일 열기 중 오류가 발생했습니다!\n");
+    }
     return NULL;
 }
