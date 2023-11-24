@@ -133,7 +133,6 @@ void* msgRecv(void* sockIdPointer) {
         if((strcmp(msg[type], "CHAT_AUTH") == 0)
             ||(strcmp(msg[type], "CHAT_REP") == 0)
             ||(strcmp(msg[type], "FILEUP_REP") == 0)
-            ||(strcmp(msg[type], "FILEUP_DATA") == 0)
             ||(strcmp(msg[type], "FILEUP_END") == 0)
             ||(strcmp(msg[type], "FILEDOWN_REP") == 0)
             ||(strcmp(msg[type], "FILEDOWN_DATA") == 0)
