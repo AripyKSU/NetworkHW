@@ -27,6 +27,7 @@ void* chat(int sockId);
 void* uploadFile(int sockId);
 void* downloadFile(int sockId);
 void* listFile(int sockId);
+void printMenu();
 
 //msg가 바뀌면 안될때 0, 계속 받을 수 있는 상황에서 1
 int msgFlag = 1;
@@ -51,9 +52,6 @@ int main(int argc, char* argv[]) {
 
     //채팅 flag 초기화
     chatAuthFlag = 0;
-
-    //상호 배제 구현을 위한 lock 초기화
-    lock = PTHREAD_MUTEX_INITIALIZER;
 
     //통신 시작
     int* sockIdPointer = malloc(sizeof(int));
@@ -163,7 +161,7 @@ void* msgSend(void* sockIdPointer) {
         //menu 창 띄우기
         printMenu();
         select = malloc(sizeof(char)*MAX);
-        scanf("%s", &select);
+        scanf("%s", select);
 
         buf = malloc(sizeof(char)*MAX);
         memset(buf, 0x00, MAX);
@@ -187,7 +185,7 @@ void* msgSend(void* sockIdPointer) {
         else if(strcmp(select, "4") == 0) {
             // pthread_t fileListId;
             // pthread_create(&fileListId, NULL, fileList, sockId);
-            fileList(sockId);
+            listFile(sockId);
         }
         //접속 종료
         else if(strcmp(select, "5") == 0) {
@@ -215,14 +213,16 @@ void printMenu() {
 char* makeMsg(char* type, char* end, char* data) {
     char* userCpy = malloc(sizeof(char)*MAX);
     strcpy(userCpy,user);
-    return strcat(strcat(strcat(strcat(strcat(strcat(strcat(strcat(userCpy, "|"),type),"|"), strlen(data)),"|"), end),"|"), data);
+    char* len = malloc(sizeof(char)*5);
+    sprintf(len,"%d", (int)strlen(data));
+    return strcat(strcat(strcat(strcat(strcat(strcat(strcat(strcat(userCpy, "|"),type),"|"), len),"|"), end),"|"), data);
 }
 
 void* chat(int sockId) {
-
+    char* buf = malloc(sizeof(char)*MAX);
     //채팅 인증 절차 (1회만 실행)
     if(chatAuthFlag == 0) {
-
+        memset(buf, 0x00, MAX);
         //chat_request
         printf("채팅방 입장 인증 요청을 전송합니다...\n");
         strcpy(buf, makeMsg("CHAT_REQ", "END", "-"));
@@ -237,7 +237,7 @@ void* chat(int sockId) {
         printf("인증을 위한 간단한 퀴즈에 답해주세요.\n");
         printf("%s ?", msg[data]);
         char* ans = malloc(sizeof(char)*16);
-        scanf("%s",&ans);
+        scanf("%s", ans);
         strcpy(buf, makeMsg("CHAT_ANS", "END", ans));
         write(sockId, buf, sizeof(buf));
 
@@ -260,7 +260,7 @@ void* chat(int sockId) {
     //메시지 보내기
     printf("보낼 메시지: ");
     char* temp = malloc(sizeof(char)*MAX);
-    scanf("%s", &temp);
+    scanf("%s", temp);
     strcpy(buf, makeMsg("CHAT_SEND", "END", temp));
     write(sockId, buf, sizeof(buf));
     free(temp);
@@ -280,17 +280,17 @@ void* uploadFile(int sockId) {
 
     char* filename = malloc(sizeof(char)*MAX);
     int fp;
-
+    
     //파일 이름 입력
     printf("업로드할 파일 이름: ");
-    scanf("%s",&filename);
+    scanf("%s", filename);
 
     //파일 열기 시도
-    if(fp = open(filename, "O_RDONLY") != -1) {
+    if(fp = open(filename, O_RDONLY) != -1) {
         
         //파일 업로드 요청
         char* buf = malloc(sizeof(char)*MAX);
-        printf("\"%s\" 파일 전송을 요청합니다... ",&filename);
+        printf("\"%s\" 파일 전송을 요청합니다... ", filename);
         strcpy(buf, makeMsg("FILEUP_REQ", "END", filename));
         write(sockId, buf, sizeof(buf));
 
@@ -314,7 +314,6 @@ void* uploadFile(int sockId) {
 
         int maxLength = MAX - (11 + 11 + 3 + 4 + 4);
         char* temp;
-        char* buf;
 
         //file을 분할, 아직 파일 데이터가 남았을 때
         for(int i=0; i<fileSize/maxLength; i++) {
@@ -335,7 +334,7 @@ void* uploadFile(int sockId) {
         strcpy(buf, makeMsg("FILEUP_DATA","END",temp));
         write(sockId, buf, sizeof(buf));
         free(temp);
-        fclose(fp);
+        close(fp);
 
         //파일 업로드 끝났다는 신호가 올 때까지 대기
         while(strcmp(msg[type],"FILEUP_END") != 0) {
@@ -345,7 +344,7 @@ void* uploadFile(int sockId) {
         printf("파일 업로드가 완료되었습니다.\n");
     }
     else {
-        printf("%s 을(를) 찾을 수 없습니다!", *filename);
+        printf("%s 을(를) 찾을 수 없습니다!", filename);
     };
     return NULL;
 }
@@ -356,11 +355,11 @@ void* downloadFile(int sockId) {
     int fp;
     //파일 이름 입력
     printf("다운로드할 파일 이름: ");
-    scanf("%s",&filename);
+    scanf("%s",filename);
 
     //파일 다운로드 요청
     char* buf = malloc(sizeof(char)*MAX);
-    printf("\"%s\" 파일 다운로드를 요청합니다... ",&filename);
+    printf("\"%s\" 파일 다운로드를 요청합니다... ",filename);
     strcpy(buf, makeMsg("FILEDOWN_REQ", "END", filename));
     write(sockId, buf, sizeof(buf));
 
@@ -398,7 +397,8 @@ void* downloadFile(int sockId) {
                 strcpy(buf, makeMsg("FILEDOWN_END", "END", "-"));
                 write(sockId, buf, sizeof(buf));
             }
-            fclose(fp);
+            close(fp);
+            break;
         }
     }
     else {
@@ -414,15 +414,18 @@ void* listFile(int sockId) {
         sleep(1);
         msgFlag = 1;
     }
-    //파일 리스트 일부만 왔을 때
-    if(strcmp(msg[end], "CONT") == 0) {
-        printf("%s",msg[data]);
-        continue;
+    while(1){
+        //파일 리스트 일부만 왔을 때
+        if(strcmp(msg[end], "CONT") == 0) {
+            printf("%s",msg[data]);
+            continue;
+        }
+        //파일 리스트 끝부분
+        if(strcmp(msg[end], "END") == 0) {
+            printf("%s",msg[data]);
+        }
+        break;
     }
-    //파일 리스트 끝부분
-    if(strcmp(msg[end], "END") == 0) {
-        printf("%s",msg[data]);
-    }
-    printf("----------------------\n")
+    printf("----------------------\n");
     return NULL;
 }
