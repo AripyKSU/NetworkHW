@@ -349,11 +349,15 @@ void uploadFile(int sockId) {
 
 //클라이언트에서 파일 업로드 선택 시 호출될 함수
 void downloadFile(int sockId) {
+
     char* filename = malloc(sizeof(char)*MAX);
     int fp;
+
     //파일 이름 입력
     printf("다운로드할 파일 이름: ");
     scanf("%s",filename);
+
+    chdir("/home/s2019112555/");
 
     //파일 다운로드 요청
     char* buf = malloc(sizeof(char)*MAX);
@@ -373,11 +377,10 @@ void downloadFile(int sockId) {
         printf("요청이 거부되었습니다. 파일 이름을 확인해보세요.\n");
         return;
     }
-    free(buf);
-    buf = malloc(sizeof(char)*MAX);
+    memset(buf, 0x00, MAX);
 
     //파일 열기 시도
-    if(fp = open(filename, O_WRONLY | O_CREAT) != -1) {
+    if((fp = open(filename, O_WRONLY | O_CREAT)) != -1) {
         while(1) {
             //파일 다운로드 데이터가 올 때까지 대기
             while(strcmp(msg[type],"FILEDOWN_DATA") != 0) {
@@ -387,6 +390,8 @@ void downloadFile(int sockId) {
             //파일 다운로드 일부만 왔을 때
             if(strcmp(msg[end], "CONT") == 0) {
                 write(fp, msg[data], strlen(msg[data]));
+                //중복 데이터 방지
+                memset(msg[type],0x00,MAX);
                 continue;
             }
             //파일 다운로드 끝부분
@@ -395,6 +400,7 @@ void downloadFile(int sockId) {
                 strcpy(buf, makeMsg("FILEDOWN_END", "END", "-"));
                 write(sockId, buf, strlen(buf));
             }
+            printf("파일 다운로드가 완료되었습니다!\n");
             close(fp);
             break;
         }
