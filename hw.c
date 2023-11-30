@@ -81,7 +81,8 @@ void msgtok(char* pkt){
         i++;
         temp = strtok(NULL, "|");
     }
-    
+    msg[data][MAX-1] = '\0';
+
     free(temp);
 }
 
@@ -412,16 +413,24 @@ void downloadFile(int sockId) {
 }
 
 void listFile(int sockId) {
+    //파일 리스트 요청
+    char* buf = malloc(sizeof(char)*MAX);
+    printf("파일 리스트를 요청합니다...\n");
+    strcpy(buf, makeMsg("FILELIST_REQ", "END", "-"));
+    write(sockId, buf, strlen(buf));
+
     printf("------파일 리스트------\n");
-    //파일 리스트 데이터가 올 때까지 대기
-    while(strcmp(msg[type],"FILELIST_REP") != 0) {
-        sleep(1);
-        msgFlag = 1;
-    }
     while(1){
+        //파일 리스트 데이터가 올 때까지 대기
+        while(strcmp(msg[type],"FILELIST_REP") != 0) {
+            sleep(1);
+            msgFlag = 1;
+        }
         //파일 리스트 일부만 왔을 때
         if(strcmp(msg[end], "CONT") == 0) {
             printf("%s",msg[data]);
+            //중복 데이터 방지
+            memset(msg[type],0x00,MAX);
             continue;
         }
         //파일 리스트 끝부분
