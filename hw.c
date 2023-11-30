@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 
 #define MAX 256
-#define port 61613
+#define port 61615
 
 typedef enum Msg {
     id, type, len, end, data
@@ -122,13 +122,11 @@ void* msgRecv() {
             continue;
         }
         memset(buf, 0x00, MAX);
-        printf("%d",sockId);
         read(sockId, buf, MAX);
-        printf("%s",buf);
         msgtok(buf);
 
         //client의 처리를 기다려야 하는 msg가 올 때 대기
-        /*if((strcmp(msg[type], "CHAT_AUTH") == 0)
+        if((strcmp(msg[type], "CHAT_AUTH") == 0)
             ||(strcmp(msg[type], "CHAT_REP") == 0)
             ||(strcmp(msg[type], "FILEUP_REP") == 0)
             ||(strcmp(msg[type], "FILEUP_END") == 0)
@@ -137,7 +135,7 @@ void* msgRecv() {
             ||(strcmp(msg[type], "FILELIST_REP") == 0)
             ||(strcmp(msg[type], "END_REP") == 0)
         )
-        msgFlag = 0;*/
+        msgFlag = 0;
 
         //END
         if(strcmp(msg[type], "END_REP") == 0) {
@@ -191,6 +189,7 @@ void* msgSend() {
             printf("안녕히 가세요~\n");
             strcpy(buf, makeMsg("END_REQ", "END", "EXIT"));
             write(sockId, buf, strlen(buf));
+            break;
         }
         free(buf);
         free(select);
@@ -283,11 +282,11 @@ void uploadFile(int sockId) {
     //파일 이름 입력
     printf("업로드할 파일 이름: ");
     scanf("%s", filename);
-    //chdir("/home/s2019112555/");
-    chdir("/root/NetworkHW");
-    
+
+    chdir("/home/s2019112555/");
+
     //파일 열기 시도
-    if(fp = open(filename, O_RDONLY) > 0) {
+    if((fp = open(filename, O_RDONLY)) > 0) {
         
         //파일 업로드 요청
         char* buf = malloc(sizeof(char)*MAX);
@@ -317,22 +316,20 @@ void uploadFile(int sockId) {
         //file을 받아오는 char* temp
         char temp[fileSize+1];
         memset(temp, 0x00, fileSize+1);
-        printf("%s",temp);
         read(fp, temp, fileSize);
-        printf("%s",temp);
 
         //file을 분할, 아직 파일 데이터가 남았을 때
         for(int i=0; i<fileSize/maxLength; i++) {
             //temp를 msg형태로 가공한 char* buf
             memset(buf, 0x00, MAX);
-            strcpy(buf, makeMsg("FILEUP_DATA","CONT",temp));
+            strncpy(buf, (temp+(i*maxLength)), maxLength); 
+            strcpy(buf, makeMsg("FILEUP_DATA","CONT", buf));
             write(sockId, buf, strlen(buf));
         }
         //file의 마지막 부분
-        memset(temp, 0x00, MAX);
-        read(fp, temp, fileSize%maxLength);
-        buf = malloc(sizeof(char)*MAX);
-        strcpy(buf, makeMsg("FILEUP_DATA","END",temp));
+        memset(buf, 0x00, MAX);
+        strncpy(buf, (temp + (fileSize/maxLength*maxLength)), fileSize%maxLength); 
+        strcpy(buf, makeMsg("FILEUP_DATA","END", buf));
         write(sockId, buf, strlen(buf));
 
         close(fp);
