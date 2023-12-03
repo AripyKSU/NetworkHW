@@ -29,13 +29,14 @@ void printMenu();
 
 //msg가 바뀌면 안될때 0, 계속 받을 수 있는 상황에서 1
 int msgFlag = 1;
-//채팅 인증이 되면 1, 인증이 안되면 0
-int chatAuthFlag = 0;
 //사용자 계정 이름
 char* user;
 //메시지가 나눠질 공간
 char** msg;
+//socket ID
 int sockId;
+//채팅방 입장 여부
+int chatFlag = 0;
 
 int main(int argc, char* argv[]) {
 
@@ -49,9 +50,6 @@ int main(int argc, char* argv[]) {
         msg[i] = (char*)malloc(sizeof(char) * MAX);
     }
 
-    //채팅 flag 초기화
-    chatAuthFlag = 0;
-
     //통신 시작
     connectServer(user);
 
@@ -64,6 +62,13 @@ int main(int argc, char* argv[]) {
     //메인 함수가 thread 끝날때까지 대기
     pthread_join(recvId, NULL);
     pthread_join(sendId, NULL);
+
+    for(int i=0; i<5; i++) {
+        free(msg[i]);
+    }
+    free(msg);
+    free(user);
+
     return 0;
 }
 
@@ -88,6 +93,7 @@ void msgtok(char* pkt){
 
 //ip, socket을 이용하여 접속을 하는 함수
 void connectServer(char* user) {
+
     //나만의 port# 이용
     struct sockaddr_in serverAddr;
 
@@ -126,6 +132,13 @@ void* msgRecv() {
         read(sockId, buf, MAX);
         msgtok(buf);
 
+        //채팅방 입장 상태에서 chat_listen이 왔을 때 출력 
+        if(strcmp(msg[type], "CHAT_LISTEN") == 0 && chatFlag == 1) {
+            printf("%s: %s\n", msg[id], msg[data]);
+            //중복 데이터 방지
+            memset(msg[type],0x00,MAX);
+        }
+
         //client의 처리를 기다려야 하는 msg가 올 때 대기
         if((strcmp(msg[type], "CHAT_AUTH") == 0)
             ||(strcmp(msg[type], "CHAT_REP") == 0)
@@ -163,26 +176,21 @@ void* msgSend() {
 
         buf = malloc(sizeof(char)*MAX);
         memset(buf, 0x00, MAX);
-        //채팅방 입장 or 채팅 보내기
+
+        //채팅방 입장
         if(strcmp(select, "1") == 0) {
-            // pthread_t chatId;
-            // pthread_create(&chatId, NULL, chat, sockId);
             chat(sockId);
         }
         //파일 업로드
         else if(strcmp(select, "2") == 0) {
-            // pthread_t uploadId;
-            // pthread_create(&uploadId, NULL, uploadFile, sockId);
             uploadFile(sockId);
         }
+        //파일 다운로드
         else if(strcmp(select, "3") == 0) {
-            // pthread_t downloadId;
-            // pthread_create(&downloadId, NULL, downloadFile, sockId);
             downloadFile(sockId);
         }
+        //파일 리스트
         else if(strcmp(select, "4") == 0) {
-            // pthread_t fileListId;
-            // pthread_create(&fileListId, NULL, fileList, sockId);
             listFile(sockId);
         }
         //접속 종료
@@ -190,6 +198,8 @@ void* msgSend() {
             printf("안녕히 가세요~\n");
             strcpy(buf, makeMsg("END_REQ", "END", "EXIT"));
             write(sockId, buf, strlen(buf));
+            free(buf);
+            free(select);
             break;
         }
         free(buf);
@@ -218,60 +228,65 @@ char* makeMsg(char* type, char* end, char* data) {
 }
 
 void* chat(int sockId) {
+
     char* buf = malloc(sizeof(char)*MAX);
-    //채팅 인증 절차 (1회만 실행)
-    if(chatAuthFlag == 0) {
-        memset(buf, 0x00, MAX);
-        //chat_request
-        printf("채팅방 입장 인증 요청을 전송합니다...\n");
-        strcpy(buf, makeMsg("CHAT_REQ", "END", "-"));
-        write(sockId, buf, strlen(buf));
+    memset(buf, 0x00, MAX);
 
-        //chat_auth
-        //요청에 대한 응답이 올때까지 대기
-        while(strcmp(msg[type],"CHAT_AUTH") != 0) {
-            sleep(1);
-            msgFlag = 1;
-        }
-        printf("인증을 위한 간단한 퀴즈에 답해주세요.\n");
-        printf("%s ?", msg[data]);
-        char* ans = malloc(sizeof(char)*16);
-        scanf("%s", ans);
-        strcpy(buf, makeMsg("CHAT_ANS", "END", ans));
-        write(sockId, buf, strlen(buf));
-
-        //chat_rep
-        while(strcmp(msg[type],"CHAT_REP") != 0) {
-            sleep(1);
-            msgFlag = 1;
-        }
-        if(msg[data] == "ALLOW") {
-            printf("인증이 완료되었습니다.\n");
-            chatAuthFlag = 1;
-        }
-        else if(strcmp(msg[data],"DENY") == 0){
-            printf("인증에 실패하였습니다.\n");
-            printf("다시 시도해보세요.\n");
-            return NULL;
-        }
-    }
-
-    //메시지 보내기
-    printf("보낼 메시지: ");
-    char* temp = malloc(sizeof(char)*MAX);
-    scanf("%s", temp);
-    strcpy(buf, makeMsg("CHAT_SEND", "END", temp));
+    //chat_request
+    printf("채팅방 입장 인증 요청을 전송합니다...\n");
+    strcpy(buf, makeMsg("CHAT_REQ", "END", "-"));
     write(sockId, buf, strlen(buf));
-    free(temp);
-    
-    if(strcmp(msg[type], "CHAT_LISTEN") == 0) {
-        //혹시 인증 안했을때 온다면 무시
-        if(chatAuthFlag == 0);
-        else if(chatAuthFlag == 1) {
-            printf("%s: %s\n", msg[id], msg[data]);
-        }
+
+    //chat_auth
+    //요청에 대한 응답이 올때까지 대기
+    while(strcmp(msg[type],"CHAT_AUTH") != 0) {
+        sleep(1);
+        msgFlag = 1;
     }
-    return NULL;
+    //사용자 응답
+    printf("인증을 위한 간단한 퀴즈에 답해주세요.\n");
+    printf("%s ?", msg[data]);
+    char* ans = malloc(sizeof(char)*16);
+    scanf("%s", ans);
+    strcpy(buf, makeMsg("CHAT_ANS", "END", ans));
+    write(sockId, buf, strlen(buf));
+    free(ans);
+
+    //chat_rep
+    while(strcmp(msg[type],"CHAT_REP") != 0) {
+        sleep(1);
+        msgFlag = 1;
+    }
+    if(msg[data] == "ALLOW") {
+        printf("인증이 완료되었습니다.\n");
+    }
+    else if(strcmp(msg[data],"DENY") == 0){
+        printf("인증에 실패하였습니다.\n");
+        printf("다시 시도해보세요.\n");
+        return NULL;
+    }
+
+    chatFlag = 1;
+    printf("채팅방에서 나가실려면 exit를 입력해주세요.\n");
+    while(1) {
+        //메시지 보내기
+        printf("보낼 메시지: ");
+        char* temp = malloc(sizeof(char)*MAX);
+        scanf("%s", temp);
+
+        if(strcmp(temp, "exit") == 0) {
+            printf("채팅방을 나갑니다.\n");
+            chatFlag = 0;
+            free(temp);
+            break;
+        }
+
+        strcpy(buf, makeMsg("CHAT_SEND", "END", temp));
+        write(sockId, buf, strlen(buf));
+        free(temp);
+        
+        return NULL;
+    }
 }
 
 //클라이언트에서 파일 업로드 선택 시 호출될 함수
